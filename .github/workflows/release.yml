@@ -1,0 +1,63 @@
+name: Release Build
+
+on:
+  release:
+    types: [created]  # Trigger when a new release is created
+
+permissions:
+  contents: write  # Requires write permissions to upload build artifacts
+
+jobs:
+  releases-matrix:
+    name: Release Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Build matrix configuration: different combinations of operating systems and architectures
+        goos: [linux, windows, darwin]  # darwin is the GOOS value for macOS
+        goarch: [amd64, arm64]
+        include:
+          - goos: windows
+            ext: .exe  # Windows executables need the .exe extension
+          - goos: linux
+            ext: ""
+          - goos: darwin
+            ext: ""
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'  # Use Go version 1.21, adjust as needed
+
+      - name: Get dependencies
+        run: |
+          go mod tidy
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          # Build the binary file
+          # Binary file name format: qrcode_${GOOS}_${GOARCH}${ext}
+          go build -o "qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}" .
+
+      - name: Generate SHA-256
+        if: matrix.goos != 'windows'  # Use sha256sum in non-Windows environments
+        run: |
+          sha256sum "qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}" > "qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}.sha256"
+
+      - name: Generate SHA-256 (Windows)
+        if: matrix.goos == 'windows'  # Use CertUtil in Windows environments
+        run: |
+          sha256sum "qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}" > "qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}.sha256"
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
+            qrcode_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}.sha256
